@@ -49,8 +49,15 @@ dmypy.json
 # macOS
 .DS_Store
 
-# Local deployment / ops scripts (contain credentials, never commit)
+# Local ops scripts (contain credentials, never commit)
 deploy_github_pypi.py
+create_release*.py
+add_secret.py
+diagnose.py
+get_logs.py
+check_logs.py
+check_workflow.py
+check_pypi_name.py
 
 # Distribution / packaging artifacts
 *.tar.gz

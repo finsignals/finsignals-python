@@ -11,8 +11,14 @@ class SentimentResult:
     negative: float
     neutral: float
 
+    _VALID_LABELS = frozenset({"positive", "negative", "neutral"})
+
+    def __post_init__(self):
+        if self.label not in self._VALID_LABELS:
+            self.label = "neutral"
+
     def __repr__(self):
-        return f"SentimentResult(label={self.label!r}, {self.label}={getattr(self, self.label):.3f})"
+        return f"SentimentResult(label={self.label!r}, {self.label}={getattr(self, self.label, float('nan')):.3f})"
 
 
 @dataclass
@@ -22,8 +28,14 @@ class DirectionalityResult:
     bearish: float
     neutral_direction: float
 
+    _VALID_LABELS = frozenset({"bullish", "bearish", "neutral_direction"})
+
+    def __post_init__(self):
+        if self.label not in self._VALID_LABELS:
+            self.label = "neutral_direction"
+
     def __repr__(self):
-        return f"DirectionalityResult(label={self.label!r}, {self.label}={getattr(self, self.label):.3f})"
+        return f"DirectionalityResult(label={self.label!r}, {self.label}={getattr(self, self.label, float('nan')):.3f})"
 
 
 @dataclass
@@ -33,8 +45,14 @@ class QualityResult:
     noise: float
     spam: float
 
+    _VALID_LABELS = frozenset({"relevant", "noise", "spam"})
+
+    def __post_init__(self):
+        if self.label not in self._VALID_LABELS:
+            self.label = "noise"
+
     def __repr__(self):
-        return f"QualityResult(label={self.label!r}, {self.label}={getattr(self, self.label):.3f})"
+        return f"QualityResult(label={self.label!r}, {self.label}={getattr(self, self.label, float('nan')):.3f})"
 
 
 @dataclass
@@ -48,8 +66,14 @@ class PostTypeResult:
     question: float
     general: float
 
+    _VALID_LABELS = frozenset({"dd", "news_reaction", "technical_analysis", "fundamentals", "question", "general"})
+
+    def __post_init__(self):
+        if self.label not in self._VALID_LABELS:
+            self.label = "general"
+
     def __repr__(self):
-        return f"PostTypeResult(label={self.label!r}, {self.label}={getattr(self, self.label):.3f})"
+        return f"PostTypeResult(label={self.label!r}, {self.label}={getattr(self, self.label, float('nan')):.3f})"
 
 
 # ── Per-item output (all 7 heads) ─────────────────────────────────────────────

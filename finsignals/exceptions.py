@@ -27,7 +27,8 @@ class InsufficientCreditsError(FinSignalsError):
             msg_parts.append(f"Remaining: {remaining}.")
         options = detail.get("options")
         if options:
-            msg_parts.append(f"Options: {options}.")
+            options_str = str(options)[:200]
+            msg_parts.append(f"Options: {options_str}.")
         err.args = (" ".join(msg_parts),)
         return err
 
@@ -79,4 +80,5 @@ class APIError(FinSignalsError):
 
     def __init__(self, status_code: int, message: str = ""):
         self.status_code = status_code
-        super().__init__(f"API error {status_code}: {message}")
+        safe_msg = message[:500] if len(message) > 500 else message
+        super().__init__(f"API error {status_code}: {safe_msg}")

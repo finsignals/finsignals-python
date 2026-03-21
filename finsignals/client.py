@@ -61,6 +61,12 @@ _DEFAULT_TIMEOUT = 30       # seconds
 _MAX_BATCH_ITEMS = 256
 _MAX_BATCH_CHARS = 128_000
 
+# Per-field length limits applied client-side before the HTTP request.
+_MAX_LEN_TICKER       = 20
+_MAX_LEN_COMPANY_NAME = 200
+_MAX_LEN_TITLE        = 1_000
+_MAX_LEN_BODY         = 40_000
+
 
 def _build_session(timeout: float, max_retries: int) -> requests.Session:
     """Return a requests Session with retry logic on connection errors."""
@@ -74,7 +80,6 @@ def _build_session(timeout: float, max_retries: int) -> requests.Session:
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
-    session.mount("http://", adapter)
     return session
 
 
@@ -112,6 +117,14 @@ class Client:
             raise ValueError(
                 "No API key provided. Pass api_key= or set the "
                 "FINSIGNALS_API_KEY environment variable."
+            )
+
+        # Only https:// and http://localhost are permitted to prevent API keys
+        # from being transmitted over plaintext on non-loopback connections.
+        if not (base_url.startswith("https://") or base_url.startswith("http://localhost") or base_url.startswith("http://127.0.0.1")):
+            raise ValueError(
+                f"base_url must start with 'https://' (or 'http://localhost' for local dev). "
+                f"Got: {base_url!r}"
             )
 
         self._api_key = resolved_key
@@ -316,13 +329,13 @@ def _build_single_payload(
 ) -> dict:
     payload = {}
     if ticker:
-        payload["ticker"] = ticker
+        payload["ticker"] = str(ticker)[:_MAX_LEN_TICKER]
     if company_name:
-        payload["company_name"] = company_name
+        payload["company_name"] = str(company_name)[:_MAX_LEN_COMPANY_NAME]
     if title:
-        payload["title"] = title
+        payload["title"] = str(title)[:_MAX_LEN_TITLE]
     if body:
-        payload["body"] = body
+        payload["body"] = str(body)[:_MAX_LEN_BODY]
     if not payload:
         raise ValueError(
             "At least one of ticker, company_name, title, or body must be non-empty."
@@ -331,13 +344,26 @@ def _build_single_payload(
 
 
 def _normalise_item(item: Dict[str, str]) -> dict:
-    """Strip unknown keys and ensure at least one field is present."""
+    """Strip unknown keys, enforce types and length limits, ensure at least one field is present."""
     allowed = {"ticker", "company_name", "title", "body"}
-    normalised = {k: v for k, v in item.items() if k in allowed and v}
+    _limits = {
+        "ticker": _MAX_LEN_TICKER,
+        "company_name": _MAX_LEN_COMPANY_NAME,
+        "title": _MAX_LEN_TITLE,
+        "body": _MAX_LEN_BODY,
+    }
+    normalised = {
+        k: str(v)[:_limits[k]]
+        for k, v in item.items()
+        if k in allowed and v
+    }
     if not normalised:
+        safe_repr = repr({k: v for k, v in item.items() if k in allowed})
+        if len(safe_repr) > 200:
+            safe_repr = safe_repr[:200] + "…"
         raise ValueError(
             f"Each batch item must have at least one non-empty field "
-            f"(ticker, company_name, title, body). Got: {item}"
+            f"(ticker, company_name, title, body). Got: {safe_repr}"
         )
     return normalised
 
@@ -368,8 +394,8 @@ def _handle_response(resp: requests.Response) -> dict:
         body = resp.json()
         if isinstance(body, dict):
             detail = body.get("detail", body)
-    except Exception:
-        pass
+    except (ValueError, requests.exceptions.JSONDecodeError):
+        logger.debug("Response body was not valid JSON (status=%s)", resp.status_code)
 
     if resp.status_code == 401:
         raise AuthenticationError()
@@ -384,8 +410,10 @@ def _handle_response(resp: requests.Response) -> dict:
         d = detail if isinstance(detail, dict) else {}
         raise RateLimitError.from_detail(d)
 
-    # Generic fallback
+    # Generic fallback — cap message length to avoid leaking large server payloads
     message = detail if isinstance(detail, str) else str(detail)
+    if len(message) > 500:
+        message = message[:500] + "…"
     raise APIError(resp.status_code, message)
 
 
