@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "finsignals-api"
+version = "0.2.0"
+description = "Python SDK for the FinSignals financial sentiment classification API"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+keywords = [
+    "finance",
+    "sentiment",
+    "nlp",
+    "reddit",
+    "trading",
+    "financial-nlp",
+    "sentiment-analysis",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Office/Business :: Financial",
+]
+dependencies = [
+    "requests>=2.28.0",
+    "urllib3>=1.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "responses>=0.23",   # mock HTTP in tests
+    "black",
+    "ruff",
+    "mypy",
+    "types-requests",
+]
+
+[project.urls]
+Homepage = "https://finsignals.ai"
+Documentation = "https://finsignals.ai/docs"
+Repository = "https://github.com/finsignals/finsignals-python"
+"Bug Tracker" = "https://github.com/finsignals/finsignals-python/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["finsignals"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.8"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
