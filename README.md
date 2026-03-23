@@ -99,6 +99,17 @@ for output in results:
 
 Output objects are in the same order as your input items. `ClassifyBatchResponse` supports `len()`, iteration, and index access (`results[0]`).
 
+### Batch timeouts
+
+`classify_batch()` automatically computes a longer timeout based on batch size:
+`max(timeout, 30 + n × 1.5)` seconds, giving ~78 s for 32 items and ~414 s for
+256 items. You can override it per call:
+
+```python
+# Override for a specific large batch
+results = client.classify_batch(items, timeout=600)
+```
+
 ## Full pipeline example (Reddit → FinSignals)
 
 ```python
@@ -181,10 +192,13 @@ except finsignals.APIError as e:
 ```python
 client = finsignals.Client(
     api_key="fs_your_key_here",  # or set FINSIGNALS_API_KEY env var
-    timeout=30,                  # request timeout in seconds (default: 30)
+    timeout=30,                  # timeout for single/health/usage calls (default: 30 s)
     max_retries=2,               # retries on 5xx errors (default: 2)
 )
 ```
+
+For batch calls, `classify_batch()` overrides `timeout` automatically based on batch
+size unless you pass an explicit `timeout` to that call (see [Batch timeouts](#batch-timeouts) above).
 
 ## Contributing
 

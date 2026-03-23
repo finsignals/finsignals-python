@@ -57,7 +57,8 @@ from .models import (
 logger = logging.getLogger("finsignals")
 
 _DEFAULT_BASE_URL = "https://api.finsignals.ai"
-_DEFAULT_TIMEOUT = 30       # seconds
+_DEFAULT_TIMEOUT = 30       # seconds — for single/health/usage calls
+_SECS_PER_BATCH_ITEM = 1.5  # conservative budget per item for auto batch timeout
 _MAX_BATCH_ITEMS = 256
 _MAX_BATCH_CHARS = 128_000
 
@@ -95,7 +96,10 @@ class Client:
     base_url : str, optional
         Override the API base URL. Defaults to ``https://api.finsignals.ai``.
     timeout : float, optional
-        Request timeout in seconds. Defaults to 30.
+        Default timeout in seconds for single classify, usage, plan, and
+        health calls. Defaults to 30. For batch calls, ``classify_batch()``
+        overrides this automatically based on batch size unless you pass an
+        explicit ``timeout`` to that call.
     max_retries : int, optional
         Number of retries on transient server errors (5xx). Defaults to 2.
 
@@ -190,6 +194,8 @@ class Client:
     def classify_batch(
         self,
         items: List[Dict[str, str]],
+        *,
+        timeout: Optional[float] = None,
     ) -> ClassifyBatchResponse:
         """
         Classify multiple posts in a single request.
@@ -202,6 +208,11 @@ class Client:
             Each dict may contain any of: ``ticker``, ``company_name``,
             ``title``, ``body``. At least one key must be non-empty per item.
             Maximum 256 items per call.
+        timeout : float, optional
+            Per-request timeout in seconds. When omitted the client
+            automatically computes ``max(self.timeout, 30 + len(items) * 1.5)``,
+            which gives ~78 s for 32 items and ~414 s for 256 items. Pass an
+            explicit value to override this formula.
 
         Returns
         -------
@@ -225,8 +236,13 @@ class Client:
 
         _check_batch_char_limit(items)
 
+        effective_timeout = (
+            timeout if timeout is not None
+            else max(self._timeout, 30.0 + len(items) * _SECS_PER_BATCH_ITEM)
+        )
+
         payload = {"items": [_normalise_item(i) for i in items]}
-        data = self._post("/v1/classify/batch", payload)
+        data = self._post("/v1/classify/batch", payload, timeout=effective_timeout)
         return parse_classify_batch_response(data)
 
     def get_usage(self) -> UsageResponse:
@@ -268,14 +284,15 @@ class Client:
 
     # ── Internal helpers ─────────────────────────────────────────────────────
 
-    def _post(self, path: str, payload: dict) -> dict:
+    def _post(self, path: str, payload: dict, timeout: Optional[float] = None) -> dict:
         url = f"{self._base_url}{path}"
         logger.debug("POST %s  payload_keys=%s", url, list(payload.keys()))
 
+        t = timeout if timeout is not None else self._timeout
         try:
-            resp = self._session.post(url, json=payload, timeout=self._timeout)
+            resp = self._session.post(url, json=payload, timeout=t)
         except requests.Timeout:
-            raise APIError(0, f"Request to {url} timed out after {self._timeout}s.")
+            raise APIError(0, f"Request to {url} timed out after {t}s.")
         except requests.ConnectionError as exc:
             raise APIError(0, f"Connection error: {exc}")
 

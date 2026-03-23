@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "finsignals-api"
-version = "0.1.1"
+version = "0.2.3"
 description = "Python SDK for the FinSignals financial sentiment classification API"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -56,6 +56,21 @@ Repository = "https://github.com/finsignals/finsignals-python"
 
 [tool.hatch.build.targets.wheel]
 packages = ["finsignals"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "live_test.py",
+    "*.env",
+    ".env*",
+    "credentials*",
+    "deploy_*.py",
+    "check_*.py",
+    "diagnose.py",
+    "get_logs.py",
+    "add_secret.py",
+    "create_release*.py",
+    "dist/",
+]
 
 [tool.black]
 line-length = 100
