@@ -1,6 +1,6 @@
 # FinSignals Python SDK
 
-[![PyPI version](https://badge.fury.io/py/finsignals.svg)](https://pypi.org/project/finsignals/)
+[![PyPI version](https://badge.fury.io/py/finsignals-api.svg)](https://pypi.org/project/finsignals-api/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 
 The official Python client for the [FinSignals API](https://finsignals.ai) — a finance-tuned NLP API that classifies Reddit posts and financial text across 7 dimensions in a single call.
@@ -23,7 +23,7 @@ print(result.credits_charged)       # 1.0
 ## Install
 
 ```bash
-pip install finsignals
+pip install finsignals-api
 ```
 
 Python 3.8+ required. No other non-standard dependencies.
