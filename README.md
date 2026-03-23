@@ -34,9 +34,22 @@ Python 3.8+ required. No other non-standard dependencies.
 
 Set your key as an environment variable (recommended):
 
+**Linux / macOS:**
 ```bash
 export FINSIGNALS_API_KEY="fs_your_key_here"
 ```
+
+**Windows (PowerShell):**
+```powershell
+$env:FINSIGNALS_API_KEY = "fs_your_key_here"
+```
+
+**Windows (Command Prompt):**
+```cmd
+set FINSIGNALS_API_KEY=fs_your_key_here
+```
+
+To set it permanently on Windows, use System Properties → Environment Variables.
 
 Or pass it directly:
 
