@@ -17,7 +17,7 @@ Classify financial social media posts across 7 dimensions in a single API call.
 Full documentation: https://finsignals.ai/docs
 """
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 
 from .client import Client, classify
 from .exceptions import (

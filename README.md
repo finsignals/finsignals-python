@@ -213,6 +213,156 @@ client = finsignals.Client(
 For batch calls, `classify_batch()` overrides `timeout` automatically based on batch
 size unless you pass an explicit `timeout` to that call (see [Batch timeouts](#batch-timeouts) above).
 
+## Rate limits
+
+Limits are per API key on a **60-second sliding window**:
+
+| Plan | `/v1/classify` (req/min) | `/v1/classify/batch` (req/min) |
+|---|---|---|
+| Free | 5 | 2 |
+| Starter | 30 | 15 |
+| Pro | 120 | 60 |
+| Scale / Enterprise | 600 | 300 |
+
+Your exact limits are always available from `client.get_plan()`:
+
+```python
+plan = client.get_plan()
+print(plan.rate_limits.single)   # e.g. 120
+print(plan.rate_limits.batch)    # e.g. 60
+```
+
+When exceeded the API returns **429 Too Many Requests**; the SDK raises `RateLimitError` with a `retry_after` attribute.
+
+## Code examples in other languages
+
+### cURL
+
+```bash
+curl -sS -X POST "https://api.finsignals.ai/v1/classify" \
+  -H "X-API-Key: $FINSIGNALS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"ticker":"NVDA","body":"Blackwell demand is insane 🚀 DD inside"}' | jq .
+```
+
+### Node.js (fetch)
+
+```javascript
+const res = await fetch("https://api.finsignals.ai/v1/classify", {
+  method: "POST",
+  headers: {
+    "X-API-Key": process.env.FINSIGNALS_API_KEY,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ ticker: "TSLA", body: "Production ramp on track." }),
+});
+const data = await res.json();
+if (!res.ok) throw new Error(JSON.stringify(data));
+console.log(data.outputs[0].directionality.label);
+```
+
+### PHP
+
+```php
+<?php
+$apiKey  = getenv('FINSIGNALS_API_KEY');
+$payload = json_encode([
+    'ticker' => 'MSFT',
+    'body'   => 'Azure revenue up 21% YoY, cloud momentum continues.',
+]);
+
+$ch = curl_init('https://api.finsignals.ai/v1/classify');
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => $payload,
+    CURLOPT_HTTPHEADER     => [
+        'X-API-Key: ' . $apiKey,
+        'Content-Type: application/json',
+    ],
+    CURLOPT_TIMEOUT        => 30,
+]);
+
+$body   = curl_exec($ch);
+$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+if ($status !== 200) {
+    throw new RuntimeException("API error $status: $body");
+}
+
+$data = json_decode($body, true);
+$out  = $data['outputs'][0];
+echo $out['sentiment']['label'] . ' / ' . $out['directionality']['label'] . PHP_EOL;
+```
+
+### Go
+
+```go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "os"
+)
+
+func main() {
+    payload, _ := json.Marshal(map[string]string{
+        "ticker": "AMZN",
+        "body":   "AWS margin expansion drives record operating income.",
+    })
+
+    req, _ := http.NewRequest("POST", "https://api.finsignals.ai/v1/classify", bytes.NewBuffer(payload))
+    req.Header.Set("X-API-Key", os.Getenv("FINSIGNALS_API_KEY"))
+    req.Header.Set("Content-Type", "application/json")
+
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        panic(err)
+    }
+    defer resp.Body.Close()
+
+    var result map[string]interface{}
+    json.NewDecoder(resp.Body).Decode(&result)
+
+    outputs := result["outputs"].([]interface{})
+    first   := outputs[0].(map[string]interface{})
+    sentiment := first["sentiment"].(map[string]interface{})
+    fmt.Println(sentiment["label"])
+}
+```
+
+### Ruby
+
+```ruby
+require 'net/http'
+require 'json'
+require 'uri'
+
+uri     = URI('https://api.finsignals.ai/v1/classify')
+payload = { ticker: 'GOOGL', body: 'Search ad revenue rebounds, AI overviews expanding.' }
+
+http          = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl  = true
+http.open_timeout = 10
+http.read_timeout = 30
+
+request = Net::HTTP::Post.new(uri.path)
+request['X-API-Key']    = ENV['FINSIGNALS_API_KEY']
+request['Content-Type'] = 'application/json'
+request.body            = payload.to_json
+
+response = http.request(request)
+raise "API error #{response.code}: #{response.body}" unless response.code == '200'
+
+data = JSON.parse(response.body)
+out  = data['outputs'][0]
+puts "#{out['sentiment']['label']} | score: #{out['relevance_score']}"
+```
+
 ## Contributing
 
 Issues and pull requests welcome at [github.com/finsignals/finsignals-python](https://github.com/finsignals/finsignals-python).
