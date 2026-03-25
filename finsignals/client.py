@@ -47,10 +47,12 @@ from .models import (
     ClassifyBatchResponse,
     ClassifyResponse,
     PlanResponse,
+    SectorRotationResponse,
     UsageResponse,
     parse_classify_batch_response,
     parse_classify_response,
     parse_plan_response,
+    parse_sector_rotation_response,
     parse_usage_response,
 )
 
@@ -58,7 +60,7 @@ logger = logging.getLogger("finsignals")
 
 _DEFAULT_BASE_URL = "https://api.finsignals.ai"
 _DEFAULT_TIMEOUT = 30       # seconds — for single/health/usage calls
-_SECS_PER_BATCH_ITEM = 1.5  # conservative budget per item for auto batch timeout
+_SECS_PER_BATCH_ITEM = 3.0  # conservative budget per item for auto batch timeout
 _MAX_BATCH_ITEMS = 256
 _MAX_BATCH_CHARS = 128_000
 
@@ -210,8 +212,8 @@ class Client:
             Maximum 256 items per call.
         timeout : float, optional
             Per-request timeout in seconds. When omitted the client
-            automatically computes ``max(self.timeout, 30 + len(items) * 1.5)``,
-            which gives ~78 s for 32 items and ~414 s for 256 items. Pass an
+            automatically computes ``max(self.timeout, 30 + len(items) * 3.0)``,
+            which gives ~126 s for 32 items and ~798 s for 256 items. Pass an
             explicit value to override this formula.
 
         Returns
@@ -266,6 +268,50 @@ class Client:
         """
         data = self._get("/v1/plan")
         return parse_plan_response(data)
+
+    def get_sector_rotation(self) -> SectorRotationResponse:
+        """
+        Return the latest daily sector and industry rotation analysis.
+
+        Covers both a 1-year and 5-year outlook, including sector/industry
+        ETF metrics, rotation phase classification, AI-generated markdown
+        summary, and historical weekly snapshots.
+
+        The two outlooks use different RS calculation windows: the 1-year view
+        uses standard 1M/3M/6M/12M windows, while the 5-year view uses
+        proportionally longer windows (3M/6M/1Y/3Y). Use
+        ``result.outlook_5y.rs_window_labels`` to map field names to display
+        labels (e.g. ``{"rs_1m": "RS 3M", ...}``).
+
+        Cost: 10 credits per call.
+
+        Returns
+        -------
+        SectorRotationResponse
+            Access ``result.outlook_1y`` and ``result.outlook_5y`` as
+            ``RotationPeriod`` objects. Each period exposes:
+
+            - ``sector_data`` — ``List[SectorEntry]``
+            - ``industry_data`` — ``List[IndustryEntry]``
+            - ``spy_metrics`` — ``SpyMetrics`` benchmark returns
+            - ``summary_md`` — AI-generated markdown analysis
+            - ``weekly_snapshots`` — raw historical weekly data (list of dicts)
+
+        Raises
+        ------
+        AuthenticationError
+            If the API key is invalid.
+        InsufficientCreditsError
+            If the account has no remaining credits.
+        RateLimitError
+            If the per-key rate limit is exceeded.
+        APIError
+            Raised for all other API errors.
+            ``status_code=503`` means the daily calculation has not yet
+            run for today — retry after a few minutes.
+        """
+        data = self._get("/v1/sector-rotation")
+        return parse_sector_rotation_response(data)
 
     def health(self) -> bool:
         """

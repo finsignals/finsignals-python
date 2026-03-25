@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "finsignals-api"
-version = "0.2.5"
-description = "Python SDK for the FinSignals financial sentiment classification API"
+version = "0.3.0"
+description = "Python SDK for the FinSignals API — Reddit sentiment classification and sector rotation analysis"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
@@ -17,6 +17,8 @@ keywords = [
     "trading",
     "financial-nlp",
     "sentiment-analysis",
+    "sector-rotation",
+    "market-analysis",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

@@ -307,3 +307,239 @@ def parse_plan_response(data: dict) -> PlanResponse:
         monthly_credits=float(data.get("monthly_credits", 0)),
         batch_max_items=int(data.get("batch_max_items", 256)),
     )
+
+
+# ── Sector Rotation models ─────────────────────────────────────────────────────
+# These are entirely separate from the Reddit Sentiment models above.
+# See GET /v1/sector-rotation and https://finsignals.ai/sector-rotation-api/
+
+@dataclass
+class SpyMetrics:
+    """SPY benchmark returns used as the baseline for relative-strength calculations."""
+    ret_1m: Optional[float]
+    ret_3m: Optional[float]
+    ret_6m: Optional[float]
+    ret_9m: Optional[float]
+    ret_12m: Optional[float]
+
+
+@dataclass
+class SectorEntry:
+    """
+    Rotation metrics for a single sector ETF.
+
+    ``name`` is the sector label (e.g. ``"Technology"``).
+    RS fields measure return vs SPY over that window.
+    For the 5-year outlook the RS windows are longer; see
+    ``RotationPeriod.rs_window_labels`` for human-readable column names.
+    """
+    name: str
+    etf: Optional[str]
+    phase: Optional[str]
+    confidence: Optional[float]
+    rotation_score: Optional[float]
+    adjustment: Optional[float]
+    rs_1m: Optional[float]
+    rs_3m: Optional[float]
+    rs_6m: Optional[float]
+    rs_9m: Optional[float]
+    rs_12m: Optional[float]
+    ret_1m: Optional[float]
+    mom_accel: Optional[float]
+    vol_ratio: Optional[float]
+    pe: Optional[float]
+
+    def __repr__(self):
+        return (
+            f"SectorEntry(name={self.name!r}, etf={self.etf!r}, "
+            f"phase={self.phase!r}, rotation_score={self.rotation_score})"
+        )
+
+
+@dataclass
+class IndustryEntry:
+    """
+    Rotation metrics for a single industry ETF.
+
+    ``parent_sector_etf`` is the ETF ticker of the parent sector.
+    ``rs_vs_sector_3m`` is the industry RS minus the parent sector RS
+    over the 3-month window — positive means the industry is leading its sector.
+    """
+    name: str
+    etf: Optional[str]
+    phase: Optional[str]
+    confidence: Optional[float]
+    rotation_score: Optional[float]
+    adjustment: Optional[float]
+    rs_1m: Optional[float]
+    rs_3m: Optional[float]
+    rs_6m: Optional[float]
+    rs_vs_sector_3m: Optional[float]
+    mom_accel: Optional[float]
+    pe: Optional[float]
+    parent_sector_etf: Optional[str]
+
+    def __repr__(self):
+        return (
+            f"IndustryEntry(name={self.name!r}, etf={self.etf!r}, "
+            f"phase={self.phase!r}, rs_vs_sector_3m={self.rs_vs_sector_3m})"
+        )
+
+
+@dataclass
+class RotationPeriod:
+    """
+    One outlook period (1-year or 5-year) within a SectorRotationResponse.
+
+    ``sector_data`` and ``industry_data`` are lists of typed entries,
+    converted from the dict-keyed API payload.
+
+    ``weekly_snapshots`` are kept as raw dicts because their nested structure
+    is large and variable (52 weeks for 1y, 260 weeks for 5y).
+
+    ``rs_window_labels`` is only populated on the 5-year outlook and maps
+    API field names to display labels, e.g.
+    ``{"rs_1m": "RS 3M", "rs_3m": "RS 6M", "rs_6m": "RS 1Y", ...}``.
+    """
+    trading_date: str
+    generated_at: str
+    spy_metrics: SpyMetrics
+    sector_data: List[SectorEntry]
+    industry_data: List[IndustryEntry]
+    summary_md: Optional[str]
+    weekly_snapshots: List[dict]
+    rs_window_labels: Optional[dict]
+
+
+@dataclass
+class SectorRotationResponse:
+    """
+    Response from GET /v1/sector-rotation.
+
+    Contains both a 1-year and a 5-year outlook. Each outlook has its own
+    sector/industry tables, SPY benchmark, AI summary, and historical snapshots.
+    The two outlooks differ in how far back the RS windows look:
+    the 1-year view uses standard 1M/3M/6M/12M windows, while the 5-year
+    view uses proportionally longer windows (3M/6M/1Y/3Y).
+
+    Cost: 10 credits per call.
+    """
+    request_id: str
+    model_version: str
+    credits_charged: float
+    trading_date: str
+    generated_at: str
+    outlook_1y: RotationPeriod
+    outlook_5y: RotationPeriod
+
+    def __repr__(self):
+        return (
+            f"SectorRotationResponse("
+            f"trading_date={self.trading_date!r}, "
+            f"sectors_1y={len(self.outlook_1y.sector_data)}, "
+            f"sectors_5y={len(self.outlook_5y.sector_data)}, "
+            f"credits_charged={self.credits_charged})"
+        )
+
+
+# ── Sector Rotation parsers ────────────────────────────────────────────────────
+
+def _parse_spy_metrics(d: dict) -> SpyMetrics:
+    return SpyMetrics(
+        ret_1m=d.get("ret_1m"),
+        ret_3m=d.get("ret_3m"),
+        ret_6m=d.get("ret_6m"),
+        ret_9m=d.get("ret_9m"),
+        ret_12m=d.get("ret_12m"),
+    )
+
+
+def _f(d: dict, key: str) -> Optional[float]:
+    """Safe float coerce — returns None if key missing or value is None."""
+    v = d.get(key)
+    return float(v) if v is not None else None
+
+
+def _parse_sector_entry(name: str, d: dict) -> SectorEntry:
+    return SectorEntry(
+        name=name,
+        etf=d.get("etf"),
+        phase=d.get("phase"),
+        confidence=_f(d, "confidence"),
+        rotation_score=_f(d, "rotation_score"),
+        adjustment=_f(d, "adjustment"),
+        rs_1m=_f(d, "rs_1m"),
+        rs_3m=_f(d, "rs_3m"),
+        rs_6m=_f(d, "rs_6m"),
+        rs_9m=_f(d, "rs_9m"),
+        rs_12m=_f(d, "rs_12m"),
+        ret_1m=_f(d, "ret_1m"),
+        mom_accel=_f(d, "mom_accel"),
+        vol_ratio=_f(d, "vol_ratio"),
+        pe=_f(d, "pe"),
+    )
+
+
+def _parse_industry_entry(name: str, d: dict) -> IndustryEntry:
+    return IndustryEntry(
+        name=name,
+        etf=d.get("etf"),
+        phase=d.get("phase"),
+        confidence=_f(d, "confidence"),
+        rotation_score=_f(d, "rotation_score"),
+        adjustment=_f(d, "adjustment"),
+        rs_1m=_f(d, "rs_1m"),
+        rs_3m=_f(d, "rs_3m"),
+        rs_6m=_f(d, "rs_6m"),
+        rs_vs_sector_3m=_f(d, "rs_vs_sector_3m"),
+        mom_accel=_f(d, "mom_accel"),
+        pe=_f(d, "pe"),
+        parent_sector_etf=d.get("parent_sector_etf") or None,
+    )
+
+
+def _parse_rotation_period(d: dict) -> RotationPeriod:
+    raw_sectors    = d.get("sector_data", {}) or {}
+    raw_industries = d.get("industry_data", {}) or {}
+
+    # Build SPY metrics from the top-level spy_metrics dict if present;
+    # fall back to the flat spy_ret_* keys that the API also provides.
+    spy_raw = d.get("spy_metrics") or {}
+    spy = _parse_spy_metrics({
+        "ret_1m":  spy_raw.get("ret_1m")  or d.get("spy_ret_1m"),
+        "ret_3m":  spy_raw.get("ret_3m")  or d.get("spy_ret_3m"),
+        "ret_6m":  spy_raw.get("ret_6m")  or d.get("spy_ret_6m"),
+        "ret_9m":  spy_raw.get("ret_9m")  or d.get("spy_ret_9m"),
+        "ret_12m": spy_raw.get("ret_12m") or d.get("spy_ret_12m"),
+    })
+
+    return RotationPeriod(
+        trading_date=str(d.get("trading_date", "")),
+        generated_at=str(d.get("generated_at", "")),
+        spy_metrics=spy,
+        sector_data=[
+            _parse_sector_entry(name, v)
+            for name, v in raw_sectors.items()
+            if isinstance(v, dict)
+        ],
+        industry_data=[
+            _parse_industry_entry(name, v)
+            for name, v in raw_industries.items()
+            if isinstance(v, dict)
+        ],
+        summary_md=d.get("summary_md"),
+        weekly_snapshots=list(d.get("weekly_snapshots") or []),
+        rs_window_labels=d.get("rs_window_labels") or None,
+    )
+
+
+def parse_sector_rotation_response(data: dict) -> SectorRotationResponse:
+    return SectorRotationResponse(
+        request_id=data["request_id"],
+        model_version=data["model_version"],
+        credits_charged=float(data["credits_charged"]),
+        trading_date=str(data["trading_date"]),
+        generated_at=str(data.get("generated_at", "")),
+        outlook_1y=_parse_rotation_period(data.get("outlook_1y") or {}),
+        outlook_5y=_parse_rotation_period(data.get("outlook_5y") or {}),
+    )

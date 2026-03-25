@@ -3,22 +3,51 @@
 [![PyPI version](https://badge.fury.io/py/finsignals-api.svg)](https://pypi.org/project/finsignals-api/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 
-The official Python client for the [FinSignals API](https://finsignals.ai) — a finance-tuned NLP API that classifies Reddit posts and financial text across 7 dimensions in a single call.
+The official Python client for the [FinSignals API](https://finsignals.ai).
 
 ```python
 import finsignals
 
 client = finsignals.Client("fs_your_key_here")
 
+# Reddit sentiment — classify a post across 7 dimensions
 result = client.classify(ticker="NVDA", body="Blackwell demand is insane 🚀🚀 DD inside")
-
 print(result.sentiment.label)       # "positive"
 print(result.directionality.label)  # "bullish"
-print(result.quality.label)         # "relevant"
-print(result.relevance_score)       # 0.9137
-print(result.sarcasm)               # False
-print(result.credits_charged)       # 1.0
+
+# Sector rotation — daily analysis with 1y and 5y outlooks
+rotation = client.get_sector_rotation()
+for sector in rotation.outlook_1y.sector_data:
+    print(sector.name, sector.phase, sector.rotation_score)
 ```
+
+---
+
+## Contents
+
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Reddit Sentiment Classification](#reddit-sentiment-classification)
+  - [The 7 classification heads](#the-7-classification-heads)
+  - [Single classification](#single-classification)
+  - [Batch classification](#batch-classification)
+  - [Full pipeline example](#full-pipeline-example)
+- [Sector Rotation Analysis](#sector-rotation-analysis)
+  - [Quick example](#sector-rotation-quick-example)
+  - [Response structure](#response-structure)
+  - [Phase values](#phase-values)
+  - [1-year vs 5-year outlooks](#1-year-vs-5-year-outlooks)
+  - [Handling the not-yet-ready state](#handling-the-not-yet-ready-state)
+  - [Sector Rotation API docs](#sector-rotation-api-docs)
+- [Account: usage and plan](#account-usage-and-plan)
+- [Error handling](#error-handling)
+- [Configuration](#configuration)
+- [Rate limits](#rate-limits)
+- [Code examples in other languages](#code-examples-in-other-languages)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
 
 ## Install
 
@@ -27,6 +56,8 @@ pip install finsignals-api
 ```
 
 Python 3.8+ required. No other non-standard dependencies.
+
+---
 
 ## Quick start
 
@@ -57,9 +88,15 @@ Or pass it directly:
 client = finsignals.Client(api_key="fs_your_key_here")
 ```
 
-## The 7 classification heads
+---
 
-Every API call returns all seven signals simultaneously:
+## Reddit Sentiment Classification
+
+Finance-tuned NLP that classifies Reddit posts and financial text across 7 dimensions in a single API call.
+
+### The 7 classification heads
+
+Every `/v1/classify` call returns all seven signals simultaneously:
 
 | Head | Type | Output |
 |---|---|---|
@@ -71,7 +108,7 @@ Every API call returns all seven signals simultaneously:
 | `author_confidence` | Float [0, 1] | How confident does the author appear? |
 | `sarcasm` | Boolean | Sarcasm flag (experimental) |
 
-## Single classification
+### Single classification
 
 ```python
 result = client.classify(
@@ -92,7 +129,7 @@ print(result.credits_charged)           # 1.0
 
 All four fields (`ticker`, `company_name`, `title`, `body`) are optional — at least one must be non-empty. Including `ticker` improves relevance scoring.
 
-## Batch classification
+### Batch classification
 
 Send up to 256 posts in a single request. Credit cost: `1.0 + 0.7 × (n - 1)` per call.
 
@@ -112,10 +149,10 @@ for output in results:
 
 Output objects are in the same order as your input items. `ClassifyBatchResponse` supports `len()`, iteration, and index access (`results[0]`).
 
-### Batch timeouts
+#### Batch timeouts
 
 `classify_batch()` automatically computes a longer timeout based on batch size:
-`max(timeout, 30 + n × 1.5)` seconds, giving ~78 s for 32 items and ~414 s for
+`max(timeout, 30 + n × 3.0)` seconds, giving ~126 s for 32 items and ~798 s for
 256 items. You can override it per call:
 
 ```python
@@ -123,7 +160,7 @@ Output objects are in the same order as your input items. `ClassifyBatchResponse
 results = client.classify_batch(items, timeout=600)
 ```
 
-## Full pipeline example (Reddit → FinSignals)
+### Full pipeline example
 
 ```python
 import praw
@@ -161,7 +198,159 @@ for post, out in signals:
 
 Full tutorial: [How to build a Reddit sentiment scanner in Python](https://finsignals.ai/blog/)
 
-## Usage and plan
+---
+
+## Sector Rotation Analysis
+
+`GET /v1/sector-rotation` delivers a daily market-structure snapshot that shows which sectors and industries are accelerating, peaking, or declining relative to SPY. It is completely independent from the Reddit Sentiment endpoint: different data sources, different calculation pipeline, different response schema.
+
+Cost: **10 credits per call.** The report is pre-calculated once per trading day (after midnight ET) and served from cache, so subsequent calls on the same day are fast.
+
+### Sector Rotation Quick Example
+
+```python
+import finsignals
+
+client = finsignals.Client()  # reads FINSIGNALS_API_KEY from env
+
+rotation = client.get_sector_rotation()
+
+print(rotation.trading_date)           # "2025-03-24"
+print(rotation.credits_charged)        # 10.0
+
+# 1-year outlook — sector table
+print("=== 1-year outlook ===")
+for sector in rotation.outlook_1y.sector_data:
+    print(
+        f"  {sector.name:<25} phase={sector.phase:<12} "
+        f"score={sector.rotation_score:+.3f}  rs_3m={sector.rs_3m:+.4f}"
+    )
+
+# 5-year outlook — top industries by rotation score
+print("=== 5-year top industries ===")
+top5 = sorted(
+    rotation.outlook_5y.industry_data,
+    key=lambda x: x.rotation_score or 0,
+    reverse=True,
+)[:5]
+for ind in top5:
+    print(f"  {ind.name:<30} parent={ind.parent_sector_etf}  score={ind.rotation_score:+.3f}")
+
+# AI-generated markdown summary
+print(rotation.outlook_1y.summary_md[:300])
+```
+
+### Response structure
+
+`client.get_sector_rotation()` returns a `SectorRotationResponse`:
+
+| Field | Type | Description |
+|---|---|---|
+| `request_id` | `str` | Unique request identifier |
+| `model_version` | `str` | API model version string |
+| `credits_charged` | `float` | Credits deducted (10.0) |
+| `trading_date` | `str` | ISO date the data applies to (`"2025-03-24"`) |
+| `generated_at` | `str` | ISO datetime the report was computed |
+| `outlook_1y` | `RotationPeriod` | 1-year lookback analysis |
+| `outlook_5y` | `RotationPeriod` | 5-year lookback analysis |
+
+Each `RotationPeriod` contains:
+
+| Field | Type | Description |
+|---|---|---|
+| `trading_date` | `str` | Date for this period |
+| `generated_at` | `str` | Timestamp this period was computed |
+| `spy_metrics` | `SpyMetrics` | SPY benchmark returns (`ret_1m` … `ret_12m`) |
+| `sector_data` | `List[SectorEntry]` | One entry per sector ETF |
+| `industry_data` | `List[IndustryEntry]` | One entry per industry ETF |
+| `summary_md` | `Optional[str]` | AI-generated markdown narrative |
+| `weekly_snapshots` | `List[dict]` | Historical weekly RS data (raw dicts) |
+| `rs_window_labels` | `Optional[dict]` | Display labels for RS columns (5y only) |
+
+Key fields on `SectorEntry`:
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `str` | Sector label (`"Technology"`) |
+| `etf` | `str` | Sector ETF ticker (`"XLK"`) |
+| `phase` | `str` | Rotation phase (see table below) |
+| `confidence` | `float` | Phase classification confidence [0, 1] |
+| `rotation_score` | `float` | Composite RS-momentum score |
+| `rs_1m` … `rs_12m` | `float` | Return vs SPY over each window |
+| `mom_accel` | `float` | Rate of change in momentum |
+| `vol_ratio` | `float` | Sector volatility vs SPY |
+| `pe` | `float` | Sector P/E ratio |
+
+Key fields on `IndustryEntry` (same as `SectorEntry` plus):
+
+| Field | Type | Description |
+|---|---|---|
+| `rs_vs_sector_3m` | `float` | Industry RS minus parent sector RS (3M) |
+| `parent_sector_etf` | `str` | ETF ticker of the parent sector |
+
+### Phase values
+
+| Phase | Meaning |
+|---|---|
+| `accumulation` | Early recovery; RS improving from a low base |
+| `advancing` | Sustained outperformance vs SPY |
+| `peaking` | RS still high but momentum decelerating |
+| `distribution` | Outperformance fading; early rotation out |
+| `declining` | Sustained underperformance |
+| `bottoming` | RS low but momentum stabilising |
+
+### 1-year vs 5-year outlooks
+
+The two outlooks use **different RS calculation windows**. This is intentional — a 5-year view needs proportionally longer lookback periods to surface structural trends rather than short-term noise.
+
+| RS field | 1-year window | 5-year window |
+|---|---|---|
+| `rs_1m` | 1 month (~21 bars) | 3 months (~64 bars) |
+| `rs_3m` | 3 months (~63 bars) | 6 months (~127 bars) |
+| `rs_6m` | 6 months (~126 bars) | 1 year (~252 bars) |
+| `rs_9m` | 9 months (~189 bars) | 2 years (~504 bars) |
+| `rs_12m` | 12 months (~252 bars) | 3 years (~756 bars) |
+
+`outlook_5y.rs_window_labels` provides the display mapping:
+
+```python
+print(rotation.outlook_5y.rs_window_labels)
+# {"rs_1m": "RS 3M", "rs_3m": "RS 6M", "rs_6m": "RS 1Y", "rs_9m": "RS 2Y", "rs_12m": "RS 3Y"}
+```
+
+### Handling the not-yet-ready state
+
+The daily calculation runs after midnight ET on trading days. If you call the endpoint before it has run (e.g. very early morning ET), the API returns **503 Service Unavailable**. The SDK raises `APIError` with `status_code=503`.
+
+```python
+import time
+import finsignals
+from finsignals import APIError
+
+client = finsignals.Client()
+
+for attempt in range(5):
+    try:
+        rotation = client.get_sector_rotation()
+        break
+    except APIError as e:
+        if e.status_code == 503:
+            print(f"Report not yet ready — retrying in 5 minutes (attempt {attempt + 1})")
+            time.sleep(300)
+        else:
+            raise
+```
+
+### Sector Rotation API docs
+
+Full REST reference, field descriptions, and interactive examples:
+[finsignals.ai/sector-rotation-api/](https://finsignals.ai/sector-rotation-api/)
+
+The live report is published daily at [finsignals.ai/sector-rotation/](https://finsignals.ai/sector-rotation/).
+
+---
+
+## Account: usage and plan
 
 ```python
 usage = client.get_usage()
@@ -171,6 +360,8 @@ print(usage.monthly_credits_remaining)     # 987499.5
 plan = client.get_plan()
 print(plan.rate_limits.batch)              # 60 (requests/minute)
 ```
+
+---
 
 ## Error handling
 
@@ -182,6 +373,7 @@ from finsignals import (
     RateLimitError,
     ValidationError,
     BatchTooLargeError,
+    APIError,
 )
 
 try:
@@ -194,11 +386,16 @@ except RateLimitError as e:
     print(f"Rate limited — retry after {e.retry_after:.1f}s")
 except ValidationError as e:
     print(f"Bad request: {e.errors}")
-except finsignals.APIError as e:
-    print(f"Unexpected error {e.status_code}: {e}")
+except APIError as e:
+    if e.status_code == 503:
+        print("Sector rotation report not yet ready for today — try again later")
+    else:
+        print(f"Unexpected error {e.status_code}: {e}")
 ```
 
 `BatchTooLargeError` is raised client-side (before the HTTP request) if you pass more than 256 items to `classify_batch()`.
+
+---
 
 ## Configuration
 
@@ -212,6 +409,8 @@ client = finsignals.Client(
 
 For batch calls, `classify_batch()` overrides `timeout` automatically based on batch
 size unless you pass an explicit `timeout` to that call (see [Batch timeouts](#batch-timeouts) above).
+
+---
 
 ## Rate limits
 
@@ -234,15 +433,24 @@ print(plan.rate_limits.batch)    # e.g. 60
 
 When exceeded the API returns **429 Too Many Requests**; the SDK raises `RateLimitError` with a `retry_after` attribute.
 
+---
+
 ## Code examples in other languages
 
-### cURL
+### cURL — sentiment
 
 ```bash
 curl -sS -X POST "https://api.finsignals.ai/v1/classify" \
   -H "X-API-Key: $FINSIGNALS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"ticker":"NVDA","body":"Blackwell demand is insane 🚀 DD inside"}' | jq .
+```
+
+### cURL — sector rotation
+
+```bash
+curl -sS "https://api.finsignals.ai/v1/sector-rotation" \
+  -H "X-API-Key: $FINSIGNALS_API_KEY" | jq '.outlook_1y.sector_data | to_entries[0]'
 ```
 
 ### Node.js (fetch)
@@ -363,6 +571,8 @@ out  = data['outputs'][0]
 puts "#{out['sentiment']['label']} | score: #{out['relevance_score']}"
 ```
 
+---
+
 ## Contributing
 
 Issues and pull requests welcome at [github.com/finsignals/finsignals-python](https://github.com/finsignals/finsignals-python).
@@ -375,6 +585,8 @@ cd finsignals-python
 pip install -e ".[dev]"
 pytest tests/ -v
 ```
+
+---
 
 ## License
 
