@@ -3,19 +3,42 @@
 [![PyPI version](https://badge.fury.io/py/finsignals-api.svg)](https://pypi.org/project/finsignals-api/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 
-The official Python client for the [FinSignals API](https://finsignals.ai).
+**7 signals from one API call.** Finance-tuned NLP for Reddit posts and market text — built for algo traders, quant researchers, and anyone piping financial social data into a model or dashboard. Plus daily sector rotation analysis with 1-year and 5-year outlooks.
+
+| Signal | Output |
+|---|---|
+| `sentiment` | `positive` / `negative` / `neutral` + probabilities |
+| `directionality` | `bullish` / `bearish` / `neutral_direction` + probabilities |
+| `quality` | `relevant` / `noise` / `spam` + probabilities |
+| `post_type` | `dd` / `news_reaction` / `technical_analysis` / `question` / `general` |
+| `relevance_score` | Float [0, 1] — how on-topic is this post for your ticker? |
+| `author_confidence` | Float [0, 1] — how confident does the author sound? |
+| `sarcasm` | Boolean flag (experimental) |
+
+**Free tier: 1,000 credits/month, no credit card required.**
+Get a key at [finsignals.ai](https://finsignals.ai).
+
+## Who uses this
+
+- **Algo traders** — filter Reddit for high-quality directional signals on a ticker before market open
+- **Quant researchers** — batch-classify thousands of posts for sentiment datasets or backtests
+- **Dashboard builders** — enrich a market dashboard with live sentiment and sector rotation data
+- **Scraping pipelines** — drop spam and noise from a firehose before it hits your database
+- **Finance NLP projects** — get 7-label annotations without labeling your own data
+
+---
 
 ```python
 import finsignals
 
 client = finsignals.Client("fs_your_key_here")
 
-# Reddit sentiment — classify a post across 7 dimensions
-result = client.classify(ticker="NVDA", body="Blackwell demand is insane 🚀🚀 DD inside")
+# Reddit sentiment â classify a post across 7 dimensions
+result = client.classify(ticker="NVDA", body="Blackwell demand is insane ðð DD inside")
 print(result.sentiment.label)       # "positive"
 print(result.directionality.label)  # "bullish"
 
-# Sector rotation — daily analysis with 1y and 5y outlooks
+# Sector rotation â daily analysis with 1y and 5y outlooks
 rotation = client.get_sector_rotation()
 for sector in rotation.outlook_1y.sector_data:
     print(sector.name, sector.phase, sector.rotation_score)
@@ -61,7 +84,7 @@ Python 3.8+ required. No other non-standard dependencies.
 
 ## Quick start
 
-**Get a free API key** at [finsignals.ai](https://finsignals.ai) — 1,000 free credits/month, no credit card required.
+**Get a free API key** at [finsignals.ai](https://finsignals.ai) â 1,000 free credits/month, no credit card required.
 
 Set your key as an environment variable (recommended):
 
@@ -80,7 +103,7 @@ $env:FINSIGNALS_API_KEY = "fs_your_key_here"
 set FINSIGNALS_API_KEY=fs_your_key_here
 ```
 
-To set it permanently on Windows, use System Properties → Environment Variables.
+To set it permanently on Windows, use System Properties â Environment Variables.
 
 Or pass it directly:
 
@@ -127,16 +150,31 @@ print(result.sarcasm)                   # False
 print(result.credits_charged)           # 1.0
 ```
 
-All four fields (`ticker`, `company_name`, `title`, `body`) are optional — at least one must be non-empty. Including `ticker` improves relevance scoring.
+#### What you get back
+
+```json
+{
+  "sentiment":         { "label": "positive", "positive": 0.91, "negative": 0.04, "neutral": 0.05 },
+  "directionality":    { "label": "bullish",  "bullish": 0.87, "bearish": 0.06, "neutral_direction": 0.07 },
+  "quality":           { "label": "relevant", "relevant": 0.83, "noise": 0.14, "spam": 0.03 },
+  "post_type":         { "label": "news_reaction" },
+  "relevance_score":   0.94,
+  "author_confidence": 0.71,
+  "sarcasm":           false,
+  "credits_charged":   1.0
+}
+```
+
+All four fields (`ticker`, `company_name`, `title`, `body`) are optional â at least one must be non-empty. Including `ticker` improves relevance scoring.
 
 ### Batch classification
 
-Send up to 256 posts in a single request. Credit cost: `1.0 + 0.7 × (n - 1)` per call.
+Send up to 256 posts in a single request. Credit cost: `1.0 + 0.7 Ã (n - 1)` per call.
 
 ```python
 results = client.classify_batch([
     {"ticker": "TSLA", "body": "Delivery miss, stock down premarket."},
-    {"ticker": "NVDA", "title": "Blackwell demand", "body": "Hyperscaler capex still strong 🚀"},
+    {"ticker": "NVDA", "title": "Blackwell demand", "body": "Hyperscaler capex still strong ð"},
     {"ticker": "AAPL", "body": "Apple beats Q3, guidance raised."},
 ])
 
@@ -152,7 +190,7 @@ Output objects are in the same order as your input items. `ClassifyBatchResponse
 #### Batch timeouts
 
 `classify_batch()` automatically computes a longer timeout based on batch size:
-`max(timeout, 30 + n × 3.0)` seconds, giving ~126 s for 32 items and ~798 s for
+`max(timeout, 30 + n Ã 3.0)` seconds, giving ~126 s for 32 items and ~798 s for
 256 items. You can override it per call:
 
 ```python
@@ -218,7 +256,7 @@ rotation = client.get_sector_rotation()
 print(rotation.trading_date)           # "2025-03-24"
 print(rotation.credits_charged)        # 10.0
 
-# 1-year outlook — sector table
+# 1-year outlook â sector table
 print("=== 1-year outlook ===")
 for sector in rotation.outlook_1y.sector_data:
     print(
@@ -226,7 +264,7 @@ for sector in rotation.outlook_1y.sector_data:
         f"score={sector.rotation_score:+.3f}  rs_3m={sector.rs_3m:+.4f}"
     )
 
-# 5-year outlook — top industries by rotation score
+# 5-year outlook â top industries by rotation score
 print("=== 5-year top industries ===")
 top5 = sorted(
     rotation.outlook_5y.industry_data,
@@ -239,6 +277,23 @@ for ind in top5:
 # AI-generated markdown summary
 print(rotation.outlook_1y.summary_md[:300])
 ```
+
+#### Sample output (sector_data, 1-year outlook)
+
+```
+Sector                    Phase          Score    RS 3M
+─────────────────────────────────────────────────────────
+Technology                advancing      +0.42    +0.0312
+Financials                advancing      +0.31    +0.0201
+Industrials               peaking        +0.18    +0.0088
+Consumer Discretionary    peaking        +0.11    +0.0044
+Health Care               neutral         0.00    -0.0012
+Real Estate               declining      -0.19    -0.0187
+Utilities                 declining      -0.27    -0.0241
+Energy                    bottoming      -0.38    -0.0390
+```
+
+Each sector includes phase classification, rotation score, RS vs SPY across multiple windows, momentum acceleration, volatility ratio, and P/E. The `summary_md` field contains an AI-generated narrative of the current rotation picture.
 
 ### Response structure
 
@@ -260,7 +315,7 @@ Each `RotationPeriod` contains:
 |---|---|---|
 | `trading_date` | `str` | Date for this period |
 | `generated_at` | `str` | Timestamp this period was computed |
-| `spy_metrics` | `SpyMetrics` | SPY benchmark returns (`ret_1m` … `ret_12m`) |
+| `spy_metrics` | `SpyMetrics` | SPY benchmark returns (`ret_1m` â¦ `ret_12m`) |
 | `sector_data` | `List[SectorEntry]` | One entry per sector ETF |
 | `industry_data` | `List[IndustryEntry]` | One entry per industry ETF |
 | `summary_md` | `Optional[str]` | AI-generated markdown narrative |
@@ -276,7 +331,7 @@ Key fields on `SectorEntry`:
 | `phase` | `str` | Rotation phase (see table below) |
 | `confidence` | `float` | Phase classification confidence [0, 1] |
 | `rotation_score` | `float` | Composite RS-momentum score |
-| `rs_1m` … `rs_12m` | `float` | Return vs SPY over each window |
+| `rs_1m` â¦ `rs_12m` | `float` | Return vs SPY over each window |
 | `mom_accel` | `float` | Rate of change in momentum |
 | `vol_ratio` | `float` | Sector volatility vs SPY |
 | `pe` | `float` | Sector P/E ratio |
@@ -301,7 +356,7 @@ Key fields on `IndustryEntry` (same as `SectorEntry` plus):
 
 ### 1-year vs 5-year outlooks
 
-The two outlooks use **different RS calculation windows**. This is intentional — a 5-year view needs proportionally longer lookback periods to surface structural trends rather than short-term noise.
+The two outlooks use **different RS calculation windows**. This is intentional â a 5-year view needs proportionally longer lookback periods to surface structural trends rather than short-term noise.
 
 | RS field | 1-year window | 5-year window |
 |---|---|---|
@@ -335,7 +390,7 @@ for attempt in range(5):
         break
     except APIError as e:
         if e.status_code == 503:
-            print(f"Report not yet ready — retrying in 5 minutes (attempt {attempt + 1})")
+            print(f"Report not yet ready â retrying in 5 minutes (attempt {attempt + 1})")
             time.sleep(300)
         else:
             raise
@@ -379,16 +434,16 @@ from finsignals import (
 try:
     result = client.classify(ticker="NVDA", body="test")
 except AuthenticationError:
-    print("Invalid API key — check finsignals.ai/api-keys")
+    print("Invalid API key â check finsignals.ai/api-keys")
 except InsufficientCreditsError as e:
     print(f"Out of credits: {e}")
 except RateLimitError as e:
-    print(f"Rate limited — retry after {e.retry_after:.1f}s")
+    print(f"Rate limited â retry after {e.retry_after:.1f}s")
 except ValidationError as e:
     print(f"Bad request: {e.errors}")
 except APIError as e:
     if e.status_code == 503:
-        print("Sector rotation report not yet ready for today — try again later")
+        print("Sector rotation report not yet ready for today â try again later")
     else:
         print(f"Unexpected error {e.status_code}: {e}")
 ```
@@ -437,16 +492,16 @@ When exceeded the API returns **429 Too Many Requests**; the SDK raises `RateLim
 
 ## Code examples in other languages
 
-### cURL — sentiment
+### cURL â sentiment
 
 ```bash
 curl -sS -X POST "https://api.finsignals.ai/v1/classify" \
   -H "X-API-Key: $FINSIGNALS_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"ticker":"NVDA","body":"Blackwell demand is insane 🚀 DD inside"}' | jq .
+  -d '{"ticker":"NVDA","body":"Blackwell demand is insane ð DD inside"}' | jq .
 ```
 
-### cURL — sector rotation
+### cURL â sector rotation
 
 ```bash
 curl -sS "https://api.finsignals.ai/v1/sector-rotation" \
